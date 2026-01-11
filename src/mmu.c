@@ -185,3 +185,77 @@ void paging_init(void)
 
 	enable_mmu_relocate();
 }
+/* src/mmu.c */
+
+/* 辅助函数：打印 Flags 的具体含义 (可选，为了显而易懂) */
+static void print_flags(unsigned long val)
+{
+    if (val & _PAGE_PRESENT) printk("V "); // Valid
+    if (val & _PAGE_READ)    printk("R "); // Read
+    if (val & _PAGE_WRITE)   printk("W "); // Write
+    if (val & _PAGE_EXEC)    printk("X "); // Execute
+    if (val & _PAGE_USER)    printk("U "); // User
+    if (val & _PAGE_GLOBAL)  printk("G "); // Global
+    if (val & _PAGE_ACCESSED) printk("A "); // Accessed
+    if (val & _PAGE_DIRTY)   printk("D "); // Dirty
+}
+
+/* 实验7核心：页表解析函数 */
+void parse_pgtable(void)
+{
+    pgd_t *pgd_base = (pgd_t *)idmap_pg_dir;
+    pmd_t *pmd_base;
+    pte_t *pte_base;
+    int i, j, k;
+
+    printk("\n=== Page Table Parsing Start ===\n");
+    printk("Root Page Table Address: 0x%lx\n", (unsigned long)idmap_pg_dir);
+
+    /* 1. 遍历一级页表 (PGD) */
+    for (i = 0; i < PTRS_PER_PGD; i++) {
+        pgd_t pgd = pgd_base[i];
+        if (pgd_val(pgd) & _PAGE_PRESENT) {
+            printk("PGD[%d]: Value=0x%lx, PFN=0x%lx, Flags=", 
+                   i, pgd_val(pgd), _pgd_pfn(pgd));
+            print_flags(pgd_val(pgd));
+            printk("\n");
+
+            /* 获取下一级 (PMD) 的物理基地址 */
+            /* 注意：在 BenOS 当前的恒等映射环境下，物理地址可以直接当指针使用 */
+            pmd_base = (pmd_t *)pgd_page_paddr(pgd);
+
+            /* 2. 遍历二级页表 (PMD) */
+            for (j = 0; j < PTRS_PER_PMD; j++) {
+                pmd_t pmd = pmd_base[j];
+                if (pmd_val(pmd) & _PAGE_PRESENT) {
+                    printk("  |-- PMD[%d]: Value=0x%lx, PFN=0x%lx, Flags=", 
+                           j, pmd_val(pmd), _pmd_pfn(pmd));
+                    print_flags(pmd_val(pmd));
+                    printk("\n");
+
+                    /* 检查是否为大页 (Leaf Entry): 如果 R/W/X 位被设置，说明是叶子节点，不再指向下一级 */
+                    if (pmd_val(pmd) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC)) {
+                        continue;
+                    }
+
+                    /* 获取下一级 (PTE) 的物理基地址 */
+                    pte_base = (pte_t *)pmd_page_paddr(pmd);
+
+                    /* 3. 遍历三级页表 (PTE) */
+                    for (k = 0; k < PTRS_PER_PTE; k++) {
+                        pte_t pte = pte_base[k];
+                        if (pte_val(pte) & _PAGE_PRESENT) {
+                            printk("      |-- PTE[%d]: Value=0x%lx, PFN=0x%lx, Flags=", 
+                                   k, pte_val(pte), pfn_pte(pte_val(pte), __pgprot(0))); // _pte_pfn 宏可能未定义，手动提取
+                            /* 如果没有 _pte_pfn 宏，可以使用 (pte_val(pte) >> _PAGE_PFN_SHIFT) */
+                            printk(" (PFN: 0x%lx) ", (pte_val(pte) >> _PAGE_PFN_SHIFT));
+                            print_flags(pte_val(pte));
+                            printk("\n");
+                        }
+                    }
+                }
+            }
+        }
+    }
+    printk("=== Page Table Parsing End ===\n");
+}

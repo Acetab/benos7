@@ -7,6 +7,7 @@
 #include "asm/plic.h"
 
 extern void do_exception_vector(void);
+extern void parse_pgtable(void);
 
 struct fault_info {
 	int (*fn)(struct pt_regs *regs, const char *name);
@@ -63,6 +64,29 @@ int name(struct pt_regs *regs, const char *str)				\
 	return 0;            \
 }
 
+int do_trap_ecall_u(struct pt_regs *regs, const char *str)
+{
+    unsigned long syscall_num = regs->a7;
+
+    switch (syscall_num) {
+    case 11: /* 自定义系统调用号 11：打印页表 */
+        parse_pgtable();
+        
+        /* 处理返回值 (可选) */
+        regs->a0 = 0;
+        
+        /* 这里的 sepc 需要 +4，跳过 ecall 指令，防止死循环 */
+        regs->sepc += 4;
+        break;
+        
+    default:
+        printk("Unknown Syscall: %ld\n", syscall_num);
+        regs->sepc += 4; /* 防止死循环 */
+        break;
+    }
+    return 0; /* 返回 0 表示处理完成，不进行 panic */
+}
+
 DO_ERROR_INFO(do_trap_unknown);
 DO_ERROR_INFO(do_trap_insn_misaligned);
 DO_ERROR_INFO(do_trap_insn_fault);
@@ -71,7 +95,7 @@ DO_ERROR_INFO(do_trap_load_misaligned);
 DO_ERROR_INFO(do_trap_load_fault);
 DO_ERROR_INFO(do_trap_store_misaligned);
 DO_ERROR_INFO(do_trap_store_fault);
-DO_ERROR_INFO(do_trap_ecall_u);
+
 DO_ERROR_INFO(do_trap_ecall_s);
 DO_ERROR_INFO(do_trap_break);
 DO_ERROR_INFO(do_page_fault);
