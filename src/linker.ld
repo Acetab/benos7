@@ -26,6 +26,11 @@ SECTIONS
 	. = ALIGN(4096);
 	_etext = .;
 
+	. = ALIGN(8);
+    /* 注意：这里的段名要与 user_app.S 中的 .section 名字一致 */
+    .yuxianze : { *(.yuxianze) }
+    /* === 新增部分结束 === */
+
 	/*
         * 只读数据段
         */

@@ -24,3 +24,4 @@ void mem_init(unsigned long start_mem, unsigned long end_mem);
 #endif
 
 #endif  /*_MM_H */
+void pt_dump_from_satp(void);

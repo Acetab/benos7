@@ -12,6 +12,8 @@
 
 extern void load_store_test(void);
 extern void shift_test(void);
+extern void user_entry(void); // 用户程序入口
+extern void do_exception_vector(void); // S模式异常向量表 (entry.S中定义)
 extern void add_sub_test(void);
 extern void branch_test(void);
 extern void my_memcpy_test(void);
@@ -349,6 +351,32 @@ void kernel_main(void)
 	//test_fault();
 	
 	test_mmu();
+	printk("Kernel init done. Switching to User Mode...\n");
+
+    /* 1. 设置 S 模式异常向量表基址 */
+    /* 注意：必须指向 entry.S 中定义的 do_exception_vector */
+    write_csr(stvec, (unsigned long)do_exception_vector);
+
+    /* 2. 修改 sstatus 寄存器以配置模式切换 */
+    unsigned long sstatus = read_csr(sstatus);
+    sstatus &= ~(1 << 8); // 清除 SPP 位 (Bit 8)，设置为 0 表示返回到 U 模式
+    sstatus |= (1 << 5);  // 设置 SPIE 位 (Bit 5)，使能中断
+    write_csr(sstatus, sstatus);
+
+    /* 3. 设置 sepc 寄存器 */
+    /* sret 指令执行后，PC 会跳转到 sepc 指向的地址，即用户程序入口 */
+    write_csr(sepc, (unsigned long)user_entry);
+
+    /* 4. 设置 sscratch */
+    /* 在 entry.S 的逻辑中，进入 trap 时会交换 sp 和 sscratch。
+       因此在进入 U 模式前，sscratch 应该保存内核栈的指针。
+       当前的 sp 就是内核栈指针。 */
+    asm volatile("csrw sscratch, sp");
+
+    /* 5. 执行 sret 指令，从 S 模式返回 U 模式 */
+    asm volatile("sret");
+
+    /* 这里之后的代码不会被执行 */
 
 	while (1) {
 		;

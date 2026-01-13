@@ -71,7 +71,7 @@ DO_ERROR_INFO(do_trap_load_misaligned);
 DO_ERROR_INFO(do_trap_load_fault);
 DO_ERROR_INFO(do_trap_store_misaligned);
 DO_ERROR_INFO(do_trap_store_fault);
-DO_ERROR_INFO(do_trap_ecall_u);
+//DO_ERROR_INFO(do_trap_ecall_u);
 DO_ERROR_INFO(do_trap_ecall_s);
 DO_ERROR_INFO(do_trap_break);
 DO_ERROR_INFO(do_page_fault);
@@ -141,4 +141,28 @@ void trap_init(void)
 	printk("stvec=0x%x, 0x%x\n", read_csr(stvec), do_exception_vector);
 	/* 使能所有中断 */
 	write_csr(sie, -1);
+}
+
+// 在 src/trap.c 中添加以下代码
+
+#include "mm.h" // 确保包含 pt_dump_from_satp 的声明
+
+int do_trap_ecall_u(struct pt_regs *regs, const char *str)
+{
+    unsigned long syscall_num = regs->s7; // 根据实验6约定，使用 s7 传递调用号
+
+    switch (syscall_num) {
+        case 11: // 自定义功能号 11：打印页表
+            printk("[Syscall] Printing Page Table...\n");
+            pt_dump_from_satp();
+            regs->a0 = 0; // 返回值
+            break;
+        default:
+            printk("Unknown syscall: %d\n", syscall_num);
+            break;
+    }
+
+    // 系统调用返回后，PC 需要指向下一条指令 (+4字节)
+    regs->sepc += 4;
+    return 1; // 返回非0值表示处理成功，不panic
 }
